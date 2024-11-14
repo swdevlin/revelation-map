@@ -1,12 +1,30 @@
 require('dotenv').config();
 const express = require('express');
+const morgan = require('morgan');
+const winston = require('winston');
 const knex = require('./db/connection');
 
 const app = express();
 const PORT = process.env.PORT;
 
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(({ timestamp, level, message }) => {
+      return `${timestamp} ${level}: ${message}`;
+    })
+  ),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'logs/app.log' })
+  ]
+});
+
 // Middleware to parse JSON
 app.use(express.json());
+
+app.use(morgan('tiny', { stream: { write: (message) => logger.info(message.trim()) } }));
 
 const sectorSelections = (ul, lr) => {
   const regions = [];
@@ -180,6 +198,24 @@ app.get('/sectors', async (req, res) => {
     console.error(error);
     res.status(500).json({ error: 'Failed to retrieve sectors' });
   }
+});
+
+app.use((req, res, next) => {
+  const startTime = Date.now();
+
+  // Log request start
+  logger.info(`Received ${req.method} request for ${req.originalUrl}`);
+
+  // Listen for the response finish event to log the time taken
+  res.on('finish', () => {
+    const endTime = Date.now();
+    const timeTaken = endTime - startTime;
+    logger.info(
+      `Completed ${req.method} request for ${req.originalUrl} - Status: ${res.statusCode} - Time taken: ${timeTaken}ms`
+    );
+  });
+
+  next();
 });
 
 // Start the server
