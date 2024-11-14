@@ -1,0 +1,4 @@
+/db/knexfile.js
+/.env
+/node_modules/
+/.idea/
