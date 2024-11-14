@@ -31,7 +31,7 @@ const sectorSelections = (ul, lr) => {
       });
     } else {
       for (let x = ul.sx; x <= lr.sx; x++)
-        for (let y = ul.sy; x <= lr.sy; y--) {
+        for (let y = ul.sy; y >= lr.sy; y--) {
           let minX, minY, maxX, maxY;
           if (x === ul.sx) {
             minX = ul.hx;
@@ -97,31 +97,48 @@ const addClauses = (query, clauses) => {
   }
 }
 
-app.get('/solarsystems', async (req, res) => {
+const parseQueryParams = (req, res, next) => {
   try {
-    const {ulsx, ulsy, ulhx, ulhy, lrsx, lrsy, lrhx, lrhy} = req.query;
+    const { ulsx, ulsy, ulhx, ulhy, lrsx, lrsy, lrhx, lrhy } = req.query;
 
     if (ulsx === undefined || ulsy === undefined) {
       return res.status(400).json({ error: 'At least upper left sector x and y required' });
     }
 
-    const ul = {
+    if (lrsx !== undefined && lrsy !== undefined) {
+      if (
+        ulhx === undefined || ulhy === undefined ||
+        lrhx === undefined || lrhy === undefined ||
+        ulsx < lrsx || ulsy > lrsy
+      ) {
+        return res.status(400).json({ error: 'hex Xs and Ys incorrect' });
+      }
+    }
+    req.ul = {
       sx: +ulsx,
       sy: +ulsy,
       hx: +ulhx,
       hy: +ulhy
     };
 
-    const lr = {
+    req.lr = {
       sx: +lrsx,
       sy: +lrsy,
       hx: +lrhx,
       hy: +lrhy
     };
 
-    const clauses = sectorSelections(ul, lr);
+    next();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Invalid query parameters' });
+  }
+};
 
-    // Query for solar systems within the specified sector and coordinate range
+app.get('/solarsystems', parseQueryParams, async (req, res) => {
+  try {
+    const clauses = sectorSelections(req.ul, req.lr);
+
     const query = knex('solar_system')
       .join('sector', 'solar_system.sector_id', 'sector.id')
       .select('solar_system.*', 'sector.x as sector_x', 'sector.y as sector_y');
@@ -136,31 +153,10 @@ app.get('/solarsystems', async (req, res) => {
   }
 });
 
-app.get('/stars', async (req, res) => {
+app.get('/stars', parseQueryParams, async (req, res) => {
   try {
-    const {ulsx, ulsy, ulhx, ulhy, lrsx, lrsy, lrhx, lrhy} = req.query;
+    const clauses = sectorSelections(req.ul, req.lr);
 
-    if (ulsx === undefined || ulsy === undefined) {
-      return res.status(400).json({ error: 'At least upper left sector x and y required' });
-    }
-
-    const ul = {
-      sx: +ulsx,
-      sy: +ulsy,
-      hx: +ulhx,
-      hy: +ulhy
-    };
-
-    const lr = {
-      sx: +lrsx,
-      sy: +lrsy,
-      hx: +lrhx,
-      hy: +lrhy
-    };
-
-    const clauses = sectorSelections(ul, lr);
-
-    // Query for solar systems within the specified sector and coordinate range
     const query = knex('solar_system')
       .join('sector', 'solar_system.sector_id', 'sector.id')
       .select('solar_system.stars', 'solar_system.x', 'solar_system.y', 'sector.x as sector_x', 'sector.y as sector_y');
