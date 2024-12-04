@@ -130,7 +130,7 @@ const parseQueryParams = (req, res, next) => {
       if (
         ulhx === undefined || ulhy === undefined ||
         lrhx === undefined || lrhy === undefined ||
-        ulsx > lrsx || ulsy < lrsy
+        +ulsx > +lrsx || +ulsy < +lrsy
       ) {
         return res.status(400).json({ error: 'hex Xs and Ys incorrect' });
       }
