@@ -3,10 +3,13 @@ const express = require('express');
 const morgan = require('morgan');
 const winston = require('winston');
 const knex = require('./db/connection');
+const path = require('node:path')
+const fs = require('fs');
 
+const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT;
-
+app.use(cors());
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
@@ -127,7 +130,7 @@ const parseQueryParams = (req, res, next) => {
       if (
         ulhx === undefined || ulhy === undefined ||
         lrhx === undefined || lrhy === undefined ||
-        ulsx < lrsx || ulsy > lrsy
+        ulsx > lrsx || ulsy < lrsy
       ) {
         return res.status(400).json({ error: 'hex Xs and Ys incorrect' });
       }
@@ -159,7 +162,7 @@ app.get('/solarsystems', parseQueryParams, async (req, res) => {
 
     const query = knex('solar_system')
       .join('sector', 'solar_system.sector_id', 'sector.id')
-      .select('solar_system.*', 'sector.x as sector_x', 'sector.y as sector_y');
+      .select('solar_system.*', 'sector.x as sector_x', 'sector.y as sector_y', 'sector.name as sector_name');
 
     addClauses(query, clauses);
 
@@ -194,6 +197,35 @@ app.get('/sectors', async (req, res) => {
   try {
     const sectors = await knex('sector').select('*').orderBy(['x', 'y']);
     res.status(200).json(sectors);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to retrieve sectors' });
+  }
+});
+
+app.get('/systemmap', async (req, res) => {
+  try {
+    const { sx, sy, hex } = req.query;
+
+    const sectors = await knex('sector').select('*').where('x', parseInt(sx)).andWhere('y', parseInt(sy));
+    const sector = sectors[0];
+    let filePath = path.join(process.env.STELLAR_DATA, sector.name, `${hex}-map.svg`);
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+      if (err) {
+        // If the file does not exist, send a 404 response
+        res.status(404).send('SVG file not found');
+        return;
+      }
+
+      // Read and send the SVG file
+      res.sendFile(filePath, (err) => {
+        if (err) {
+          console.error('Error sending SVG file:', err);
+          res.status(500).send('Error serving the SVG file');
+        }
+      });
+    });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to retrieve sectors' });
